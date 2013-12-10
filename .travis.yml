@@ -10,7 +10,7 @@ env:
 
 before_script:
   - sh -c "if [ '$PHPCS' != '1' ]; then git clone --depth 1 --branch $CAKE_VERSION git://github.com/cakephp/cakephp ../cakephp && cd ../cakephp; fi"
-  - sh -c "if [ '$PHPCS' != '1' ]; then cd ../cakephp; cp -R ../CakePHP-Mollie-plugin plugins/Mollie; fi"
+  - sh -c "if [ '$PHPCS' != '1' ]; then cd ../cakephp; cp -R ../cakephp-mollie plugins/Mollie; fi"
   - sh -c "if [ '$PHPCS' = '1' ]; then pear channel-discover pear.cakephp.org; fi"
   - sh -c "if [ '$PHPCS' = '1' ]; then pear install --alldeps cakephp/CakePHP_CodeSniffer; fi"
   - phpenv rehash
