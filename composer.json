@@ -1,0 +1,21 @@
+{
+        "name": "djbobke/cakephp-mollie",
+        "type": "cakephp-plugin",
+        "description": "CakePHP plugin for Mollie (Dutch payment provider), For iDeal, Pay-per-call and Pay-per-SMS.",
+        "homepage": "http://github.com/djbobke/cakephp-mollie",
+        "license": "MIT",
+        "authors": [
+                {
+                        "name": "Rik van der Heijden",
+                        "email": "mail@rikvanderheijden.com",
+                        "homepage": "http://rikvanderheijden.com"
+                }
+        ],
+        "require": {
+                "php": ">=5.3.0",
+                "composer/installers": "*"
+        },
+        "extra": {
+                "installer-name": "Search"
+        }
+}
