@@ -6,9 +6,10 @@ A CakePHP plugin for Mollie (Dutch payment provider), For iDeal, Pay-per-call an
 
 ## TODO ##
 
-* Fix unit-tests
-* Update README
-* Add examples?
+* Implement Mollie's 'new' [API](https://www.mollie.nl/files/documentatie/payments-api-nl.pdf)
+* Add usage and examples to README
+* Add composer usage
+* improve docblocks on functions
 
 ## Requirements ##
 
