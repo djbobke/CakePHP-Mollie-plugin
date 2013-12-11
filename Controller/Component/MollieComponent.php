@@ -2,6 +2,7 @@
 App::uses('HttpSocket', 'Network/Http');
 App::uses('String', 'Utility');
 App::uses('Validation', 'Utility');
+App::uses('Xml', 'Utility');
 
 class MollieComponent extends Component {
 
@@ -13,20 +14,16 @@ class MollieComponent extends Component {
 
 	public $returnUrl = array('controller' => 'payment', 'action' => 'return');
 
-	private function __getHttpSocket() {
+	public function __construct(ComponentCollection $collection, $settings = array()) {
+		parent::__construct($collection, $settings);
+
 		/* Need to disable verify_host for now because secure.mollie.nl != mollie.nl */
-		$sock = new HttpSocket(array('ssl_verify_host' => false));
-		$sock->responseClass = 'Mollie.XmlResponse';
-		return $sock;
+		$this->Http = new HttpSocket(array('ssl_verify_host' => false));
 	}
 
 	private function __testmode(&$options) {
-		if ($this->testmode = true) {
-			if (is_array($options)) {
-				$options['testmode'] = 'true';
-			} else {
-				$options .= '&testmode=true';
-			}
+		if ($this->testmode == true) {
+			$options['testmode'] = 'true';
 		}
 	}
 
@@ -34,13 +31,17 @@ class MollieComponent extends Component {
 		$params = array('a' => 'banklist');
 		$this->__testmode($params);
 
-		$sock = $this->__getHttpSocket();
-		$response = $sock->get('https://secure.mollie.nl/xml/ideal', $params);
-		foreach ($response->body()->bank as $bank) {
-			//@codingStandardsIgnoreStart
-			$bankid = (string)$bank->bank_id;
-			$banks[$bankid] = (string)$bank->bank_name;
-			//@codingStandardsIgnoreEnd
+		$response = $this->Http->get('https://secure.mollie.nl/xml/ideal', $params);
+		$data = Xml::toArray(Xml::build($response->body));
+
+		if (isset($data['response']['bank']['bank_id'])) {
+			/* apparently there is only 1 bank */
+			$banks = array($data['response']['bank']['bank_id'] => $data['response']['bank']['bank_name']);
+		} else {
+			foreach ($data['response']['bank'] as $bank) {
+				$bankid = $bank['bank_id'];
+				$banks[$bankid] = $bank['bank_name'];
+			}
 		}
 		return $banks;
 	}
@@ -48,8 +49,8 @@ class MollieComponent extends Component {
  * @throws InternalErrorException when no partner ID is configured
  */
 	public function iDealFetchPayment($bankId, $amount, $description, $return = null) {
-		if (is_null($this->partnerId)) {
-			throw InternalErrorException('No Mollie partner ID configured');
+		if ($this->partnerId === null) {
+			throw new InternalErrorException(__('No Mollie partner ID configured'));
 		}
 		$params = array(
 			'a' => 'fetch',
@@ -64,23 +65,21 @@ class MollieComponent extends Component {
 			$params['returnurl'] = Router::url($return, true);
 		}
 		$this->__testmode($params);
-		$sock = $this->__getHttpSocket();
-		$response = $sock->get('https://secure.mollie.nl/xml/ideal', $params);
-		$data = $response->body()->order;
+		$response = $this->Http->get('https://secure.mollie.nl/xml/ideal', $params);
+		$data = Xml::toArray(Xml::build($response->body));
+
 		return array(
-			'url' => (string)$data->URL,
-			//@codingStandardsIgnoreStart
-			'transaction_id' => (string)$data->transaction_id,
-			//@codingStandardsIgnoreEnd
-			'currency' => (string)$data->currency);
+			'url' => $data['response']['order']['URL'],
+			'transaction_id' => $data['response']['order']['transaction_id'],
+			'currency' => $data['response']['order']['currency']);
 	}
 
 /**
  * @throws InternalErrorException when no partner ID is configured
  */
 	public function iDealCheckPayment($transactionId, &$payed) {
-		if (is_null($this->partnerId)) {
-			throw InternalErrorException('No Mollie partner ID configured');
+		if ($this->partnerId === null) {
+			throw new InternalErrorException(__('No Mollie partner ID configured'));
 		}
 		$params = array(
 			'a' => 'check',
@@ -89,23 +88,19 @@ class MollieComponent extends Component {
 		$this->__testmode($params);
 		$payed = false;
 		try {
-			$sock = $this->__getHttpSocket();
-			$response = $sock->get('https://secure.mollie.nl/xml/ideal', $params);
-			if ($response) {
-				$res = $response->body();
-				if (isset($res->order)) {
-					$data = $res->order;
-					$payed = (string)$data->payed;
-					return array(
-						'payed' => $payed,
-						'amount' => (string)$data->amount,
-						'name' => (string)$data->consumer->consumerName,
-						'account' => (string)$data->consumer->consumerAccount,
-						'city' => (string)$data->consumer->consumerCity);
-				}
-				return array('payed' => false);
+			$response = $this->Http->get('https://secure.mollie.nl/xml/ideal', $params);
+			$data = Xml::toArray(Xml::build($response->body));
+			if (isset($data['response']['order']) && $data['response']['order']['payed'] == 'true') {
+				$data = $data['response']['order'];
+				$payed = $data['payed'];
+				return array(
+					'payed' => $payed,
+					'amount' => $data['amount'],
+					'name' => $data['consumer']['consumerName'],
+					'account' => $data['consumer']['consumerAccount'],
+					'city' => $data['consumer']['consumerCity']);
 			}
-			return false;
+			return array('payed' => false);
 		} catch (Exception $e) {
 			return false;
 		}
@@ -115,8 +110,8 @@ class MollieComponent extends Component {
  * @throws InternalErrorException when no partner ID is configured
  */
 	public function callFetchPayment($amount, $report = null) {
-		if (is_null($this->partnerId)) {
-			throw InternalErrorException('No Mollie partner ID configured');
+		if ($this->partnerId === null) {
+			throw new InternalErrorException(__('No Mollie partner ID configured'));
 		}
 		$params = array(
 			'a' => 'fetch',
@@ -128,45 +123,52 @@ class MollieComponent extends Component {
 		if (!is_null($report)) {
 			$params['report'] = Router::url($report, true);
 		}
-		$sock = $this->__getHttpSocket();
+		$response = $this->Http->get('https://www.mollie.nl/xml/micropayment/', $params);
+		$data = Xml::toArray(Xml::build($response->body));
 
-		$response = $sock->get('https://www.mollie.nl/xml/micropayment/', $params);
-		$data = $response->body()->item;
-
-		$mode = (string)$data->mode;
+		if (!isset($data['response']['item'])) {
+			return false;
+		}
+		$data = $data['response']['item'];
+		$mode = $data['mode'];
 		if ($mode == 'ppc') {
-			$customercost = (string)$data->costpercall;
+			$customercost = $data['costpercall'];
 		} elseif ($mode == 'ppm') {
-			$customercost = (string)$data->costperminute;
+			$customercost = $data['costperminute'];
 		}
 
 		return array(
-			'number' => (string)$data->servicenumber,
+			'number' => $data['servicenumber'],
 			'mode' => $mode,
-			'paycode' => (string)$data->paycode,
-			'amount' => (string)$data->amount,
-			'duration' => (string)$data->duration,
+			'paycode' => $data['paycode'],
+			'amount' => $data['amount'],
+			'duration' => $data['duration'],
 			'customercost' => $customercost,
-			'currency' => (string)$data->currency,
-			'payout' => (string)$data->payout);
+			'currency' => $data['currency'],
+			'payout' => $data['payout']);
 	}
 
 	public function callCheckPayment($servicenumber, $paycode, &$payed) {
+		if ($this->partnerId === null) {
+			throw new InternalErrorException(__('No Mollie partner ID configured'));
+		}
+
 		$params = array(
 			'a' => 'check',
 			'servicenumber' => $servicenumber,
 			'paycode' => $paycode);
 		$payed = false;
 		try {
-			$sock = $this->__getHttpSocket();
-			$response = $sock->get('https://www.mollie.nl/xml/micropayment/', $params);
-			if ($response) {
-				$data = $response->body()->item;
+			$response = $this->Http->get('https://www.mollie.nl/xml/micropayment/', $params);
+			$data = Xml::toArray(Xml::build($response->body));
 
-				$payed = (string)$data->payed;
+			if (isset($data['response']['item']) && $data['response']['item']['payed'] == 'true') {
+				$data = $data['response']['item'];
+
+				$payed = ($data['payed'] == 'true');
 				return array(
 					'payed' => $payed,
-					'amount' => (string)$data->amount);
+					'amount' => $data['amount']);
 			}
 			return false;
 		} catch (Exception $e) {
@@ -178,8 +180,8 @@ class MollieComponent extends Component {
  * @throws InternalErrorException when no partner ID is configured
  */
 	public function smsFetchPayment($micropaymentId, $amount = null, $country = null) {
-		if (is_null($this->partnerId)) {
-			throw InternalErrorException('No Mollie partner ID configured');
+		if ($this->partnerId === null) {
+			throw new InternalErrorException(__('No Mollie partner ID configured'));
 		}
 
 		$paycode = String::uuid();
