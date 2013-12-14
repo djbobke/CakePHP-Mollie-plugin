@@ -195,8 +195,8 @@ class MollieComponentTest extends CakeTestCase {
 	public function setUp() {
 		Router::fullBaseUrl('http://www.example.com/test');
 		parent::setUp();
-		$Collection = new ComponentCollection();
-		$this->Mollie = new MollieComponent($Collection, $this->settings);
+		$this->Collection = new ComponentCollection();
+		$this->Mollie = new MollieComponent($this->Collection, $this->settings);
 		$this->Mollie->Http = new StubHttpSocket();
 	}
 
@@ -211,6 +211,11 @@ class MollieComponentTest extends CakeTestCase {
 	}
 
 	public function testTestMode() {
+		$this->Mollie = new MollieComponent($this->Collection);
+		$this->assertNotIdentical($this->Mollie->testmode, null);
+
+		$this->Mollie = new MollieComponent($this->Collection, $this->settings);
+		$this->Mollie->Http = new StubHttpSocket();
 		$this->Mollie->testmode = true;
 		$this->Mollie->Http->body = $this->testStrings['idealbanklist1'];
 		$this->assertEqual($this->Mollie->iDealBanklist(), array(

@@ -8,7 +8,7 @@ class MollieComponent extends Component {
 
 	public $partnerId = null;
 
-	public $testmode = false;
+	public $testmode = null;
 
 	public $reportUrl = array('controller' => 'api', 'action' => 'report');
 
@@ -16,6 +16,10 @@ class MollieComponent extends Component {
 
 	public function __construct(ComponentCollection $collection, $settings = array()) {
 		parent::__construct($collection, $settings);
+
+		if ($this->testmode === null) {
+			$this->testmode = (Configure::read('debug') >= 1);
+		}
 
 		/* Need to disable verify_host for now because secure.mollie.nl != mollie.nl */
 		$this->Http = new HttpSocket(array('ssl_verify_host' => false));
